@@ -33,7 +33,7 @@ var FB_PROFILE = {
 
 module.exports = {
     describe: function() {
-        describe('/facebook_token', function() {
+        describe.only('/facebook_token', function() {
 
             beforeEach(function(done) {
                 userDao.deleteAllUsers(function(err){
@@ -99,9 +99,41 @@ module.exports = {
                         done();
                     });
                 });
-
             });
 
+            it('creates a user with a facebook domain email when username field is missing', function(done) {
+
+                var noEmailUser = clone(baseUser);
+                delete noEmailUser.email;
+
+                var madeUpEmailFbProfile = clone(FB_PROFILE);
+                madeUpEmailFbProfile.email = noEmailUser.id + '@facebook.com';
+
+                nockFBGraphCall(madeUpEmailFbProfile, OPTIONS.body.accessToken, config.facebook.requestFields);
+                nockPrivateCall(config, noEmailUser.id);
+
+                var options = clone(OPTIONS);
+                options.url ='http://localhost:' + config.public_port + '/auth/login/facebook';
+                options.headers[config.version.header] = "test/1";
+
+                request(options, function(err, res, body) {
+                    assert.equal(err, null);
+                    assert.ok(body.accessToken);
+                    assert.ok(body.refreshToken);
+                    assert.ok(body.expiresIn);
+
+                    userDao.getFromUsername(madeUpEmailFbProfile.email, function (err, foundUser) {
+                        assert.equal(err, null);
+                        assert.ok(foundUser);
+                        assert.equal(foundUser.username, madeUpEmailFbProfile.email);
+                        assert.ok(foundUser.platforms);
+                        var fbPlatform = foundUser.platforms[0];
+                        assert.equal(fbPlatform.platform, 'fb');
+                        assert.equal(fbPlatform.accessToken, OPTIONS.body.accessToken);
+                        done();
+                    });
+                });
+            });
         });
     }
 };
